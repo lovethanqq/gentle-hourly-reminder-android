@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,6 +96,7 @@ fun LuoluoReminderApp() {
         mutableStateOf(settings.headerTitle ?: if (isDebug) DEFAULT_DEBUG_TITLE else "")
     }
     var showSettings by remember { mutableStateOf(false) }
+    var homeBgOpacity by remember { mutableIntStateOf(settings.homeBgOpacity) }
     var notifDenied by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableLongStateOf(0L) }
 
@@ -208,6 +210,9 @@ fun LuoluoReminderApp() {
         }
     }
 
+    // 背景浓度：透明度 100 = 图最清晰（蒙层最浅），0 = 接近纯白
+    val scrimAlpha = (0.95f - 0.55f * (homeBgOpacity / 100f)).coerceIn(0.3f, 0.95f)
+
     val homeBgBitmap = remember(settings.homeBgPath) {
         if (settings.homeBgPath.isBlank()) {
             null
@@ -242,7 +247,7 @@ fun LuoluoReminderApp() {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.White.copy(alpha = 0.86f)),
+                    .background(Color.White.copy(alpha = scrimAlpha)),
             )
         }
         MaterialTheme(
@@ -264,6 +269,12 @@ fun LuoluoReminderApp() {
                         isDebug = isDebug,
                         personaPreview = personaPreview,
                         homeBgPreview = homeBgPreview,
+                        homeBgOpacity = homeBgOpacity,
+                        onHomeBgOpacityChange = {
+                            homeBgOpacity = it
+                            settings = settings.copy(homeBgOpacity = it)
+                            SettingsStore.setHomeBgOpacity(context, it)
+                        },
                         onPickPersona = ::pickPersona,
                         onClearPersona = ::clearPersona,
                         onPickHomeBg = ::pickHomeBg,

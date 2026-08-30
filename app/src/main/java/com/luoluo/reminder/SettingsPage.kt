@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -64,6 +65,8 @@ fun SettingsPage(
     isDebug: Boolean,
     personaPreview: ImageBitmap?,
     homeBgPreview: ImageBitmap?,
+    homeBgOpacity: Int,
+    onHomeBgOpacityChange: (Int) -> Unit,
     onPickPersona: (Uri?) -> Unit,
     onClearPersona: () -> Unit,
     onPickHomeBg: (Uri?) -> Unit,
@@ -271,6 +274,12 @@ fun SettingsPage(
                 Spacer(Modifier.height(12.dp))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("背景透明度：${homeBgOpacity}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Slider(
+                value = homeBgOpacity.toFloat(),
+                onValueChange = { onHomeBgOpacityChange((it + 0.5f).toInt()) },
+                valueRange = 0f..100f,
+            )
                 Button(onClick = { homeBgPicker.launch(arrayOf("image/*")) }) {
                     Text("从相册选择")
                 }

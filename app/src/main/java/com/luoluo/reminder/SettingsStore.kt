@@ -25,6 +25,8 @@ object SettingsStore {
         val personaPath: String = "",
         /** 首页背景图片（绝对路径），空串 = 无背景 */
         val homeBgPath: String = "",
+        /** 首页背景不透明度 0-100：越大背景图越清晰 */
+        val homeBgOpacity: Int = 60,
     ) {
         val anyEnabled: Boolean get() = activityEnabled || mealEnabled || sleepEnabled
 
@@ -51,6 +53,7 @@ object SettingsStore {
             headerTitle = sp.getString("headerTitle", null),
             personaPath = sp.getString("personaPath", "") ?: "",
             homeBgPath = sp.getString("homeBgPath", "") ?: "",
+            homeBgOpacity = sp.getInt("homeBgOpacity", 60),
         )
     }
 
@@ -68,6 +71,7 @@ object SettingsStore {
         s.headerTitle?.let { e.putString("headerTitle", it) }
         e.putString("personaPath", s.personaPath)
         e.putString("homeBgPath", s.homeBgPath)
+        e.putInt("homeBgOpacity", s.homeBgOpacity)
         e.apply()
     }
 
@@ -90,6 +94,13 @@ object SettingsStore {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
             .putString("homeBgPath", path)
+            .apply()
+    }
+
+    fun setHomeBgOpacity(context: Context, value: Int) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putInt("homeBgOpacity", value)
             .apply()
     }
 
