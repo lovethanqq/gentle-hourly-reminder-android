@@ -19,6 +19,12 @@ object SettingsStore {
         val mealText: String = "",
         val sleepText: String = "",
         val voiceEnabled: Boolean = true,
+        /** 首页顶部标题：null = 从未设置过（Debug 默认显示标语 / Release 默认空白）；"" = 用户主动清空 */
+        val headerTitle: String? = null,
+        /** 通知头像图片（绝对路径），空串 = 不显示 */
+        val personaPath: String = "",
+        /** 首页背景图片（绝对路径），空串 = 无背景 */
+        val homeBgPath: String = "",
     ) {
         val anyEnabled: Boolean get() = activityEnabled || mealEnabled || sleepEnabled
 
@@ -42,19 +48,48 @@ object SettingsStore {
             mealText = sp.getString("mealText", "") ?: "",
             sleepText = sp.getString("sleepText", "") ?: "",
             voiceEnabled = sp.getBoolean("voiceEnabled", true),
+            headerTitle = sp.getString("headerTitle", null),
+            personaPath = sp.getString("personaPath", "") ?: "",
+            homeBgPath = sp.getString("homeBgPath", "") ?: "",
         )
     }
 
     fun save(context: Context, s: Settings) {
+        val sp = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+        val e = sp.edit()
+        e.putBoolean("activityEnabled", s.activityEnabled)
+        e.putBoolean("mealEnabled", s.mealEnabled)
+        e.putBoolean("sleepEnabled", s.sleepEnabled)
+        e.putString("activityText", s.activityText)
+        e.putString("mealText", s.mealText)
+        e.putString("sleepText", s.sleepText)
+        e.putBoolean("voiceEnabled", s.voiceEnabled)
+        // headerTitle 为 null 表示用户从未在设置页改过：保留默认值不覆盖
+        s.headerTitle?.let { e.putString("headerTitle", it) }
+        e.putString("personaPath", s.personaPath)
+        e.putString("homeBgPath", s.homeBgPath)
+        e.apply()
+    }
+
+    /** 设置页专用：直接更新首页顶部标题（写入后即使用户清空也保持空白） */
+    fun setHeaderTitle(context: Context, title: String) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit()
-            .putBoolean("activityEnabled", s.activityEnabled)
-            .putBoolean("mealEnabled", s.mealEnabled)
-            .putBoolean("sleepEnabled", s.sleepEnabled)
-            .putString("activityText", s.activityText)
-            .putString("mealText", s.mealText)
-            .putString("sleepText", s.sleepText)
-            .putBoolean("voiceEnabled", s.voiceEnabled)
+            .putString("headerTitle", title)
+            .apply()
+    }
+
+    fun setPersonaPath(context: Context, path: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString("personaPath", path)
+            .apply()
+    }
+
+    fun setHomeBgPath(context: Context, path: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString("homeBgPath", path)
             .apply()
     }
 

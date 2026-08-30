@@ -12,17 +12,23 @@ android {
         applicationId = "com.luoluo.reminder"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "2.3"
+        versionCode = 6
+        versionName = "2.4"
     }
 
     buildTypes {
+        debug {
+            // 开源版本的应用名
+            resValue("string", "app_name", "今天也要努力生活呀！加油鸭！")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // 使用 debug 签名，方便直接安装体验
             signingConfig = signingConfigs.getByName("debug")
+            // 作者自用版：应用名留空白，通知头部不显示名字
+            resValue("string", "app_name", " ")
         }
     }
     compileOptions {

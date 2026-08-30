@@ -59,7 +59,7 @@ class ReminderReceiver : BroadcastReceiver() {
         }
         ScreenWake.wakeBriefly(context)
         val text = s.textFor(due.type)
-        Notifier.show(context, due, text)
+        Notifier.show(context, due, text, s.personaPath)
         SettingsStore.setLastNotifiedKey(context, key)
         finishWithAnnouncement(context, text)
     }
@@ -71,7 +71,7 @@ class ReminderReceiver : BroadcastReceiver() {
         ScreenWake.wakeBriefly(context)
         val now = System.currentTimeMillis()
         val text = SettingsStore.load(context).textFor(type)
-        Notifier.show(context, type, fmt(now), text)
+        Notifier.show(context, type, fmt(now), text, SettingsStore.load(context).personaPath)
         finishWithAnnouncement(context, text)
     }
 

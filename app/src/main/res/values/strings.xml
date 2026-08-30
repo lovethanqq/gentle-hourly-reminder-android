@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">今天也要努力生活呀！加油鸭！</string>
+    <!-- 应用名由 buildType 的 resValue 提供：
+         Debug（开源用户默认构建）= 今天也要努力生活呀！加油鸭！
+         Release（作者自用正式版）= 空白（通知头部不显示应用名） -->
 </resources>

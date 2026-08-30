@@ -47,22 +47,38 @@ object Notifier {
         NotificationManagerCompat.from(context).areNotificationsEnabled()
 
     /** 展示一次真实调度出来的提醒（文案由调用方解析） */
-    fun show(context: Context, event: ScheduleMath.Event, text: String) {
-        show(context, event.type, formatTime(event.triggerAt), text)
+    fun show(context: Context, event: ScheduleMath.Event, text: String, personaPath: String?) {
+        show(context, event.type, formatTime(event.triggerAt), text, personaPath)
     }
 
     /**
      * 展示一条提醒通知。点击后打开 App 首页，几秒后横幅自动消失。
-     * 视觉：最左人物图片位 + 气泡尾巴 + 纯深色圆角文字条（只有正文和小时间）。
-     * 注意：刻意不调用 setColor() —— 系统模板会用强调色在通知边缘画出彩色条，
-     * 不设强调色即可保持干净的深色气泡。
+     * 视觉：完全跟随系统卡片底色；若用户设置了头像图，则显示在文字左侧。
+     * 注意：刻意不调用 setColor() —— 系统模板会用强调色在通知边缘画出彩色条。
      */
-    fun show(context: Context, type: ReminderType, timeLabel: String, text: String) {
+    fun show(
+        context: Context,
+        type: ReminderType,
+        timeLabel: String,
+        text: String,
+        personaPath: String?,
+    ) {
         ensureChannels(context)
 
         val card = RemoteViews(context.packageName, R.layout.notification_card).apply {
             setTextViewText(R.id.notif_body, text)
             setTextViewText(R.id.notif_time, timeLabel)
+            val persona = if (personaPath.isNullOrBlank()) {
+                null
+            } else {
+                ImageStore.decode(context, java.io.File(personaPath).name, 96)
+            }
+            if (persona != null) {
+                setImageViewBitmap(R.id.notif_person, persona)
+                setViewVisibility(R.id.notif_person, android.view.View.VISIBLE)
+            } else {
+                setViewVisibility(R.id.notif_person, android.view.View.GONE)
+            }
         }
 
         val openApp = PendingIntent.getActivity(
