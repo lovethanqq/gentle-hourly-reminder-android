@@ -11,48 +11,32 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,7 +44,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -74,7 +57,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.luoluo.reminder.ScheduleMath.ReminderType
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -98,10 +80,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val AccentBlue = Color(0xFF4FA3E3)
-private val AccentGreen = Color(0xFF34C759)
-private val AccentPurple = Color(0xFFAF52DE)
-
 /** 开源（Debug）构建的默认首页标题；Release（作者自用）默认空白 */
 private const val DEFAULT_DEBUG_TITLE = "今天也要努力生活呀！加油鸭！"
 
@@ -112,27 +90,10 @@ fun LuoluoReminderApp() {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
-    // 表单状态：提醒相关点“保存设置”时才生效；外观相关（标题/图片）即时生效
-    val saved = remember { SettingsStore.load(context) }
-    var activityOn by remember { mutableStateOf(saved.activityEnabled) }
-    var mealOn by remember { mutableStateOf(saved.mealEnabled) }
-    var sleepOn by remember { mutableStateOf(saved.sleepEnabled) }
-    var activityText by remember {
-        mutableStateOf(saved.activityText.ifBlank { ReminderType.ACTIVITY.text })
-    }
-    var mealText by remember {
-        mutableStateOf(saved.mealText.ifBlank { ReminderType.MEAL.text })
-    }
-    var sleepText by remember {
-        mutableStateOf(saved.sleepText.ifBlank { ReminderType.SLEEP.text })
-    }
-    var voiceOn by remember { mutableStateOf(saved.voiceEnabled) }
+    var settings by remember { mutableStateOf(SettingsStore.load(context)) }
     var headerTitle by remember {
-        mutableStateOf(settingsHeaderValue(saved.headerTitle, isDebug))
+        mutableStateOf(settings.headerTitle ?: if (isDebug) DEFAULT_DEBUG_TITLE else "")
     }
-    var personaPath by remember { mutableStateOf(saved.personaPath) }
-    var homeBgPath by remember { mutableStateOf(saved.homeBgPath) }
-
     var showSettings by remember { mutableStateOf(false) }
     var notifDenied by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableLongStateOf(0L) }
@@ -151,7 +112,7 @@ fun LuoluoReminderApp() {
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                notifDenied = (activityOn || mealOn || sleepOn) && !Notifier.canNotify(context)
+                notifDenied = settings.anyEnabled && !Notifier.canNotify(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -170,19 +131,57 @@ fun LuoluoReminderApp() {
         }
     }
 
-    fun applySettings() {
-        val s = SettingsStore.Settings(
-            activityOn, mealOn, sleepOn,
-            activityText.trim(), mealText.trim(), sleepText.trim(),
-            voiceOn,
-            // 标题由设置页维护，这里不覆盖
-            headerTitle = null,
-            personaPath = personaPath,
-            homeBgPath = homeBgPath,
-        )
-        SettingsStore.save(context, s)
+    fun sendTest(type: ReminderType) {
+        if (!Notifier.canNotify(context)) {
+            requestPermissionIfNeeded()
+            return
+        }
+        val now = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        val text = settings.textFor(type)
+        Notifier.show(context, type, now, text, settings.personaPath)
+        if (settings.voiceEnabled && VoiceAnnouncer.headsetConnected(context)) {
+            VoiceAnnouncer.announceAsync(context, text) { }
+        }
+    }
+
+    fun onDebugFullTest(type: ReminderType) {
+        val triggerAt = System.currentTimeMillis() + 2 * 60_000L
+        ReminderScheduler.scheduleDebugTest(context, triggerAt, type)
+        scope.launch {
+            snackbar.showSnackbar("已安排：2分钟后走完整链路弹出「${type.label}」，可先锁屏等待")
+        }
+    }
+
+    fun pickPersona(uri: Uri?) {
+        if (uri != null && ImageStore.copyFromUri(context, uri, ImageStore.PERSONA_FILE)) {
+            settings = settings.copy(personaPath = ImageStore.path(context, ImageStore.PERSONA_FILE))
+            SettingsStore.setPersonaPath(context, settings.personaPath)
+        }
+    }
+
+    fun pickHomeBg(uri: Uri?) {
+        if (uri != null && ImageStore.copyFromUri(context, uri, ImageStore.HOME_BG_FILE)) {
+            settings = settings.copy(homeBgPath = ImageStore.path(context, ImageStore.HOME_BG_FILE))
+            SettingsStore.setHomeBgPath(context, settings.homeBgPath)
+        }
+    }
+
+    fun clearPersona() {
+        ImageStore.clear(context, ImageStore.PERSONA_FILE)
+        settings = settings.copy(personaPath = "")
+        SettingsStore.setPersonaPath(context, "")
+    }
+
+    fun clearHomeBg() {
+        ImageStore.clear(context, ImageStore.HOME_BG_FILE)
+        settings = settings.copy(homeBgPath = "")
+        SettingsStore.setHomeBgPath(context, "")
+    }
+
+    fun onSaveReminders() {
+        SettingsStore.save(context, settings)
         Notifier.ensureChannels(context)
-        if (s.anyEnabled) {
+        if (settings.anyEnabled) {
             ReminderScheduler.scheduleNext(context)
             requestPermissionIfNeeded()
         } else {
@@ -191,80 +190,40 @@ fun LuoluoReminderApp() {
         }
         refreshTick++
         scope.launch {
-            snackbar.showSnackbar(if (s.anyEnabled) "设置已保存" else "已保存，所有提醒已关闭")
+            snackbar.showSnackbar(if (settings.anyEnabled) "提醒设置已保存" else "已保存，所有提醒已关闭")
         }
     }
 
-    fun sendTest(type: ReminderType) {
-        if (!Notifier.canNotify(context)) {
-            requestPermissionIfNeeded()
-            return
-        }
-        val now = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        val text = when (type) {
-            ReminderType.ACTIVITY -> activityText.ifBlank { type.text }
-            ReminderType.MEAL -> mealText.ifBlank { type.text }
-            ReminderType.SLEEP -> sleepText.ifBlank { type.text }
-        }
-        Notifier.show(context, type, now, text.trim(), SettingsStore.load(context).personaPath)
-        if (voiceOn && VoiceAnnouncer.headsetConnected(context)) {
-            VoiceAnnouncer.announceAsync(context, text.trim()) { }
-        }
-    }
-
-    fun pickPersona(uri: Uri?) {
-        if (uri != null && ImageStore.copyFromUri(context, uri, ImageStore.PERSONA_FILE)) {
-            personaPath = ImageStore.path(context, ImageStore.PERSONA_FILE)
-            SettingsStore.setPersonaPath(context, personaPath)
-        }
-    }
-
-    fun pickHomeBg(uri: Uri?) {
-        if (uri != null && ImageStore.copyFromUri(context, uri, ImageStore.HOME_BG_FILE)) {
-            homeBgPath = ImageStore.path(context, ImageStore.HOME_BG_FILE)
-            SettingsStore.setHomeBgPath(context, homeBgPath)
-        }
-    }
-
-    fun clearPersona() {
-        ImageStore.clear(context, ImageStore.PERSONA_FILE)
-        personaPath = ""
-        SettingsStore.setPersonaPath(context, "")
-    }
-
-    fun clearHomeBg() {
-        ImageStore.clear(context, ImageStore.HOME_BG_FILE)
-        homeBgPath = ""
-        SettingsStore.setHomeBgPath(context, "")
-    }
-
-    val anyOn = activityOn || mealOn || sleepOn
-    val nextFire = remember(activityOn, mealOn, sleepOn, refreshTick) {
-        if (activityOn || mealOn || sleepOn) {
+    val anyOn = settings.anyEnabled
+    val nextFire = remember(anyOn, refreshTick) {
+        if (anyOn) {
             ScheduleMath.nextAfter(
-                System.currentTimeMillis(), activityOn, mealOn, sleepOn,
+                System.currentTimeMillis(),
+                settings.activityEnabled,
+                settings.mealEnabled,
+                settings.sleepEnabled,
             )
         } else {
             null
         }
     }
 
-    val homeBgBitmap = remember(homeBgPath) {
-        if (homeBgPath.isBlank()) {
+    val homeBgBitmap = remember(settings.homeBgPath) {
+        if (settings.homeBgPath.isBlank()) {
             null
         } else {
             ImageStore.decode(context, ImageStore.HOME_BG_FILE, 1200)?.asImageBitmap()
         }
     }
-    val personaPreview = remember(showSettings, personaPath) {
-        if (showSettings && personaPath.isNotBlank()) {
+    val personaPreview = remember(showSettings, settings.personaPath) {
+        if (showSettings && settings.personaPath.isNotBlank()) {
             ImageStore.decode(context, ImageStore.PERSONA_FILE, 96)?.asImageBitmap()
         } else {
             null
         }
     }
-    val homeBgPreview = remember(showSettings, homeBgPath) {
-        if (showSettings && homeBgPath.isNotBlank()) {
+    val homeBgPreview = remember(showSettings, settings.homeBgPath) {
+        if (showSettings && settings.homeBgPath.isNotBlank()) {
             ImageStore.decode(context, ImageStore.HOME_BG_FILE, 420)?.asImageBitmap()
         } else {
             null
@@ -295,28 +254,32 @@ fun LuoluoReminderApp() {
             ) { innerPadding ->
                 if (showSettings) {
                     SettingsPage(
+                        settings = settings,
                         headerTitle = headerTitle,
+                        onUpdate = { settings = it },
+                        onSaveReminders = ::onSaveReminders,
+                        onDebugFullTest = ::onDebugFullTest,
+                        sendTest = ::sendTest,
+                        notifDenied = notifDenied,
+                        isDebug = isDebug,
+                        personaPreview = personaPreview,
+                        homeBgPreview = homeBgPreview,
+                        onPickPersona = ::pickPersona,
+                        onClearPersona = ::clearPersona,
+                        onPickHomeBg = ::pickHomeBg,
+                        onClearHomeBg = ::clearHomeBg,
                         onHeaderTitleChange = {
                             headerTitle = it
                             SettingsStore.setHeaderTitle(context, it)
                         },
-                        hasPersona = personaPath.isNotBlank(),
-                        personaPreview = personaPreview,
-                        onPickPersona = ::pickPersona,
-                        onClearPersona = ::clearPersona,
-                        hasHomeBg = homeBgPath.isNotBlank(),
-                        homeBgPreview = homeBgPreview,
-                        onPickHomeBg = ::pickHomeBg,
-                        onClearHomeBg = ::clearHomeBg,
                         onBack = { showSettings = false },
                     )
                 } else {
+                    // ---------- 首页：纯状态面板 ----------
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(innerPadding)
-                            .verticalScroll(rememberScrollState())
-                            .imePadding()
                             .padding(horizontal = 20.dp),
                     ) {
                         Spacer(Modifier.height(12.dp))
@@ -326,176 +289,56 @@ fun LuoluoReminderApp() {
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
                             )
-                            Spacer(Modifier.height(20.dp))
+                            Spacer(Modifier.height(24.dp))
                         }
-
-                        ModuleCard(
-                            title = "活动提醒",
-                            accent = AccentBlue,
-                            enabled = activityOn,
-                            onToggle = { activityOn = it },
-                            schedule = "09:00 – 23:00（每个整点）",
-                            text = activityText,
-                            onTextChange = { activityText = it },
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        ModuleCard(
-                            title = "饮食提醒",
-                            accent = AccentGreen,
-                            enabled = mealOn,
-                            onToggle = { mealOn = it },
-                            schedule = "08:00 · 12:00 · 18:00",
-                            text = mealText,
-                            onTextChange = { mealText = it },
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        ModuleCard(
-                            title = "睡觉提醒",
-                            accent = AccentPurple,
-                            enabled = sleepOn,
-                            onToggle = { sleepOn = it },
-                            schedule = "00:00",
-                            text = sleepText,
-                            onTextChange = { sleepText = it },
-                        )
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            ),
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("戴耳机时语音播报", style = MaterialTheme.typography.bodyLarge)
-                                Text(
-                                    "佩戴耳机时用语音念出文案，正在播放的音乐只会压低、不会暂停",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Switch(checked = voiceOn, onCheckedChange = { voiceOn = it })
-                        }
-                        Spacer(Modifier.height(12.dp))
-
-                        if ((activityOn || mealOn || sleepOn) && notifDenied) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                ),
-                            ) {
-                                Column(Modifier.padding(14.dp)) {
+                            Box(Modifier.padding(20.dp)) {
+                                Column(Modifier.padding(end = 44.dp)) {
                                     Text(
-                                        "需要通知权限才能发送提醒。",
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        if (anyOn) "提醒进行中" else "提醒未开启",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    TextButton(onClick = {
-                                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                        context.startActivity(intent)
-                                    }) {
-                                        Text("去开启")
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(12.dp))
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        Button(
-                            onClick = { applySettings() },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("保存设置")
-                        }
-                        Spacer(Modifier.height(16.dp))
-
-                        // 以下两个测试区仅在 Debug 构建显示
-                        if (isDebug) {
-                            Text(
-                                "测试预览",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TestButton("测试活动提醒", AccentBlue, Modifier.weight(1f)) {
-                                    sendTest(ReminderType.ACTIVITY)
-                                }
-                                TestButton("测试饮食提醒", AccentGreen, Modifier.weight(1f)) {
-                                    sendTest(ReminderType.MEAL)
-                                }
-                                TestButton("测试睡觉提醒", AccentPurple, Modifier.weight(1f)) {
-                                    sendTest(ReminderType.SLEEP)
-                                }
-                            }
-                            Spacer(Modifier.height(16.dp))
-
-                            Text(
-                                "完整链路测试（仅 Debug 版）",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            var debugStep by remember { mutableIntStateOf(0) }
-                            val debugTypes = listOf(
-                                ReminderType.ACTIVITY, ReminderType.MEAL, ReminderType.SLEEP,
-                            )
-                            Button(
-                                onClick = {
-                                    val type = debugTypes[debugStep % debugTypes.size]
-                                    debugStep++
-                                    val triggerAt = System.currentTimeMillis() + 2 * 60_000L
-                                    ReminderScheduler.scheduleDebugTest(context, triggerAt, type)
-                                    scope.launch {
-                                        snackbar.showSnackbar(
-                                            "已安排：2分钟后走完整链路弹出「${type.label}」，可先锁屏等待",
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        text = when {
+                                            !anyOn -> "去 ⚙ 里开启提醒"
+                                            nextFire != null ->
+                                                "下一次：${describeNext(nextFire.triggerAt)} · ${nextFire.type.label}"
+                                            else -> "提醒已开启"
+                                        },
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    if (anyOn && notifDenied) {
+                                        Spacer(Modifier.height(8.dp))
+                                        Text(
+                                            "需要通知权限才能发送提醒。",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
                                         )
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text("2分钟后完整测试")
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "完整经过：AlarmManager → ReminderReceiver → WakeLock → " +
-                                    "Notification → scheduleNext。连续点击依次测试活动 / 饮食 / 睡觉。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(16.dp))
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            val statusText = when {
-                                !anyOn -> "提醒未开启"
-                                nextFire != null ->
-                                    "下一次提醒：${describeNext(nextFire.triggerAt)} · ${nextFire.type.label}"
-                                else -> "时间范围无效"
-                            }
-                            Text(
-                                statusText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f),
-                            )
-                            IconButton(
-                                onClick = { showSettings = true },
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_gear),
-                                    contentDescription = "设置",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                }
+                                IconButton(
+                                    onClick = { showSettings = true },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .align(Alignment.TopEnd),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_gear),
+                                        contentDescription = "设置",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
-                        Spacer(Modifier.height(20.dp))
                     }
                 }
             }
@@ -503,93 +346,15 @@ fun LuoluoReminderApp() {
     }
 }
 
-@Composable
-private fun ModuleCard(
-    title: String,
-    accent: Color,
-    enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    schedule: String,
-    text: String,
-    onTextChange: (String) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        ),
-        border = BorderStroke(1.dp, accent.copy(alpha = if (enabled) 0.6f else 0.22f)),
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(accent),
-                )
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = onToggle,
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = accent,
-                        checkedThumbColor = Color.White,
-                    ),
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "时间：$schedule",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(
-                value = text,
-                onValueChange = onTextChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("提醒文案") },
-                textStyle = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TestButton(label: String, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.45f)),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-    }
-}
-
 private fun isDebugBuild(context: android.content.Context): Boolean =
     (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-/** 从未设置过标题时按构建类型给默认值：Debug 显示标语，Release 空白 */
-private fun settingsHeaderValue(saved: String?, isDebug: Boolean): String =
-    saved ?: if (isDebug) DEFAULT_DEBUG_TITLE else ""
-
 private fun describeNext(nextMillis: Long): String {
     val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(nextMillis))
-    val nextCal = Calendar.getInstance().apply { timeInMillis = nextMillis }
-    val nowCal = Calendar.getInstance()
+    val nextCal = java.util.Calendar.getInstance().apply { timeInMillis = nextMillis }
+    val nowCal = java.util.Calendar.getInstance()
     val sameDay =
-        nextCal.get(Calendar.YEAR) == nowCal.get(Calendar.YEAR) &&
-            nextCal.get(Calendar.DAY_OF_YEAR) == nowCal.get(Calendar.DAY_OF_YEAR)
+        nextCal.get(java.util.Calendar.YEAR) == nowCal.get(java.util.Calendar.YEAR) &&
+            nextCal.get(java.util.Calendar.DAY_OF_YEAR) == nowCal.get(java.util.Calendar.DAY_OF_YEAR)
     return (if (sameDay) "今天 " else "明天 ") + time
 }
