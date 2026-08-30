@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 仅申请实现功能真正需要的 4 个权限：
+         POST_NOTIFICATIONS     - Android 13+ 发通知的运行时权限
+         RECEIVE_BOOT_COMPLETED - 开机后恢复提醒计划
+         VIBRATE                - 通知震动所需
+         WAKE_LOCK              - 闹钟到达时短暂点亮屏幕（约 10 秒自动释放）
+         注意：本项目无任何网络功能，因此刻意不声明 INTERNET 权限。
+         同时刻意不申请 SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM（非精确闹钟足够）、
+         SYSTEM_ALERT_WINDOW（不做悬浮窗）、USE_FULL_SCREEN_INTENT（Android 14+
+         对提醒类应用默认收回，改用 WAKE_LOCK 短暂亮屏方案）。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label=" "
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Luoluo">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 闹钟触发时由系统唤醒：发通知 → 安排下一次 → 立即结束。
+             exported=false：只有本应用（通过 AlarmManager 的 PendingIntent）能触发。 -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false" />
+
+        <!-- 开机 / 系统时间或时区变化时恢复提醒计划（仅当用户此前开启了提醒）。
+             这些都是受保护的系统广播，第三方应用无法伪造。 -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
